@@ -1,5 +1,5 @@
-#ifndef SERVICE_H
-#define SERVICE_H
+#ifndef SERVICE_IF_H
+#define SERVICE_IF_H
 
 #include <optional>
 #include <Request.h>

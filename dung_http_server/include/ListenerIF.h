@@ -6,7 +6,7 @@
 class ListenerIF {
 public:
     virtual ~ListenerIF() = default;
-    virtual linux::FileDesc listen() = 0;
+    virtual os::FileDesc listen() = 0;
 };
 
 #endif 

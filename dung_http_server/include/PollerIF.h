@@ -9,7 +9,7 @@
 class PollerIF {
 public:
     virtual ~PollerIF() = default;
-    virtual  std::optional<Event> poll(const linux::FileDesc& fd) = 0;
+    virtual  std::optional<Event> poll(const os::FileDesc& fd) = 0;
 };
 
 #endif 
