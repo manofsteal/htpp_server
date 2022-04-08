@@ -1,19 +1,18 @@
-#include <Application.h>
+#include "Application.h"
+
+#include <thread>
 
 int main(int argc, char** argv) {
     
     Application app;
     
-    auto err = app.setup();
-    if (err) {
-        return *err;
+    auto status = app.setup();
+
+    if (status != Status::OK) {
+        return (int)status;
     }
 
-    err = app.exec();
+    status = app.exec();
 
-    if (err) {
-        return *err;
-    }
-
-    return 0;
+    return (int)status;
 }

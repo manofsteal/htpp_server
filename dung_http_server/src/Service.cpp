@@ -5,7 +5,7 @@ Service::~Service() {
 
 }
 
-std::optional<Reponse> Service::handle(const Request& req) {
+void Service::handle(const Event& ev) {
 
 }
 

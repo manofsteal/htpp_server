@@ -1,12 +1,17 @@
 #ifndef LISTENER_IF_H
 #define LISTENER_IF_H
 
+#include <optional>
+
 #include <Linux.h>
+#include <Utils.h>
 
 class ListenerIF {
 public:
     virtual ~ListenerIF() = default;
-    virtual os::FileDesc listen() = 0;
+
+    virtual Status setup() = 0;
+    virtual std::optional<os::FileDesc> listen() = 0;
 };
 
 #endif 

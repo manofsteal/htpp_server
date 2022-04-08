@@ -17,5 +17,8 @@ target_sources(${PROJECT_NAME} PRIVATE
     src/Listener.cpp
     src/Poller.cpp
     src/Service.cpp
-    
+    src/IOEpoll.cpp
+    src/EpollWorker.cpp
 )
+
+target_link_libraries(${PROJECT_NAME} PRIVATE "-pthread")

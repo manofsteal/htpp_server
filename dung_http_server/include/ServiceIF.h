@@ -2,13 +2,12 @@
 #define SERVICE_IF_H
 
 #include <optional>
-#include <Request.h>
-#include <Reponse.h>
+#include <Event.h>
 
 class ServiceIF {
 public:
     virtual ~ServiceIF() = default;
-    virtual std::optional<Reponse> handle(const Request& req) = 0;
+    virtual void handle(const Event& ev) = 0;
 };
 
 #endif 
