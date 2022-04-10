@@ -32,7 +32,7 @@ make -j8
 server: 
 ```
 cd ...http_server/build
-./http_server
+./http_server > /dev/null 2>&1
 
 ```
 
