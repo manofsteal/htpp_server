@@ -24,8 +24,8 @@ HttpService::~HttpService() {
 }
 
 HttpResponse HttpService::handle(const HttpRequest& request) {
-  auto it = request_handlers_.find(request.uri());
-  if (it == request_handlers_.end()) {    // this uri is not registered
+  auto it = mHandlers.find(request.uri());
+  if (it == mHandlers.end()) {    // this uri is not registered
     return HttpResponse(HttpStatusCode::NotFound);
   }
   auto callback_it = it->second.find(request.method());
@@ -35,5 +35,12 @@ HttpResponse HttpService::handle(const HttpRequest& request) {
   return callback_it->second(request);    // call handler to process the request
 }
 
+void HttpService::registerHandler(const std::string& path, HttpMethod method, const HttpRequestHandler callback) {
+    Uri uri(path);
+    mHandlers[uri].insert(std::make_pair(method, std::move(callback)));
+}
+void HttpService::registerHandler(const Uri& uri, HttpMethod method, const HttpRequestHandler callback) {
+    mHandlers[uri].insert(std::make_pair(method, std::move(callback)));
+}
 
 

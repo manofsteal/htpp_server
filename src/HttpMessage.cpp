@@ -10,7 +10,10 @@
 #include <type_traits>
 #include <utility>
 
-std::string method_to_string(HttpMethod method) {
+namespace utils {
+
+
+std::string MethodToString(HttpMethod method) {
   switch (method) {
     case HttpMethod::GET:
       return "GET";
@@ -35,7 +38,8 @@ std::string method_to_string(HttpMethod method) {
   }
 }
 
-std::string version_to_string(HttpVersion version) {
+
+std::string VersionToString(HttpVersion version) {
   switch (version) {
     case HttpVersion::HTTP_0_9:
       return "HTTP/0.9";
@@ -50,7 +54,8 @@ std::string version_to_string(HttpVersion version) {
   }
 }
 
-std::string code_to_string(HttpStatusCode status_code) {
+
+std::string CodeToString(HttpStatusCode status_code) {
   switch (status_code) {
     case HttpStatusCode::Continue:
       return "Continue";
@@ -85,7 +90,8 @@ std::string code_to_string(HttpStatusCode status_code) {
   }
 }
 
-std::optional<HttpMethod> string_to_method(const std::string& method_string) {
+
+std::optional<HttpMethod> MethodFromString(const std::string& method_string) {
   std::string method_string_uppercase;
   std::transform(method_string.begin(), method_string.end(),
       std::back_inserter(method_string_uppercase), [](char c) { return toupper(c); });
@@ -113,7 +119,8 @@ std::optional<HttpMethod> string_to_method(const std::string& method_string) {
   }
 }
 
-std::optional<HttpVersion> string_to_version(const std::string& version_string) {
+
+std::optional<HttpVersion> VersionFromString(const std::string& version_string) {
   std::string version_string_uppercase;
   std::transform(version_string.begin(), version_string.end(),
       std::back_inserter(version_string_uppercase), [](char c) { return toupper(c); });
@@ -131,12 +138,13 @@ std::optional<HttpVersion> string_to_version(const std::string& version_string) 
   }
 }
 
-std::string to_string(const HttpRequest& request) {
+
+std::string ReqToString(const HttpRequest& request) {
   std::ostringstream oss;
 
-  oss << method_to_string(request.method()) << ' ';
+  oss << MethodToString(request.method()) << ' ';
   oss << request.uri().path() << ' ';
-  oss << version_to_string((HttpVersion)request.version()) << "\r\n";
+  oss << VersionToString((HttpVersion)request.version()) << "\r\n";
   for (const auto& p : request.headers())
     oss << p.first << ": " << p.second << "\r\n";
   oss << "\r\n";
@@ -145,12 +153,12 @@ std::string to_string(const HttpRequest& request) {
   return oss.str();
 }
 
-std::string to_string(const HttpResponse& response, bool send_content) {
+std::string ResToString(const HttpResponse& response, bool send_content) {
   std::ostringstream oss;
 
-  oss << version_to_string((HttpVersion)response.version()) << ' ';
-  oss << static_cast<int>(response.status_code()) << ' ';
-  oss << code_to_string((HttpStatusCode)response.status_code()) << "\r\n";
+  oss << VersionToString((HttpVersion)response.version()) << ' ';
+  oss << static_cast<int>(response.statusCode()) << ' ';
+  oss << CodeToString((HttpStatusCode)response.statusCode()) << "\r\n";
   for (const auto& p : response.headers())
     oss << p.first << ": " << p.second << "\r\n";
   oss << "\r\n";
@@ -160,7 +168,8 @@ std::string to_string(const HttpResponse& response, bool send_content) {
   return oss.str();
 }
 
-HttpRequest string_to_request(const std::string& request_string) {
+
+HttpRequest ReqFromString(const std::string& request_string) {
   std::string start_line, header_lines, message_body;
   std::istringstream iss;
   HttpRequest request;
@@ -172,7 +181,7 @@ HttpRequest string_to_request(const std::string& request_string) {
   rpos = request_string.find("\r\n", lpos);
   if (rpos == std::string::npos) {
     // throw std::invalid_argument("Could not find request start line");
-    request.SetCode(HttpStatusCode::BadRequest);
+    request.setCode(HttpStatusCode::BadRequest);
   }
 
   start_line = request_string.substr(lpos, rpos - lpos);
@@ -192,19 +201,19 @@ HttpRequest string_to_request(const std::string& request_string) {
   iss >> method >> path >> version;
   if (!iss.good() && !iss.eof()) {
     // throw std::invalid_argument("Invalid start line format");
-    request.SetCode(HttpStatusCode::BadRequest);
+    request.setCode(HttpStatusCode::BadRequest);
     return request;
   }
-  auto httpMethod = string_to_method(method);
+  auto httpMethod = MethodFromString(method);
   if (!httpMethod) {
-      request.SetCode(HttpStatusCode::MethodNotAllowed);
+      request.setCode(HttpStatusCode::MethodNotAllowed);
       return request;
   }
-  request.SetMethod(*httpMethod);
-  request.SetUri(Uri(path));
-  if (string_to_version(version) != request.version()) {
-    // throw std::logic_error("HTTP version not supported");
-    request.SetCode(HttpStatusCode::HttpVersionNotSupported);
+  request.setMethod(*httpMethod);
+  request.setUri(Uri(path));
+  if (VersionFromString(version) != request.version()) {
+
+    request.setCode(HttpStatusCode::HttpVersionNotSupported);
     return request;
   }
 
@@ -218,16 +227,18 @@ HttpRequest string_to_request(const std::string& request_string) {
     // remove whitespaces from the two strings
     key.erase(std::remove_if(key.begin(), key.end(), [](char c) { return std::isspace(c); }), key.end());
     value.erase(std::remove_if(value.begin(), value.end(), [](char c) { return std::isspace(c); }), value.end());
-    request.SetHeader(key, value);
+    request.setHeader(key, value);
   }
 
-  request.SetContent(message_body);
+  request.setContent(message_body);
 
   return request;
 }
 
-HttpResponse string_to_response(const std::string& response_string) {
-  throw std::logic_error("Method not implemented");
+
+HttpResponse ResFromString(const std::string& response_string) {
+    return HttpResponse();
 }
 
 
+} // namespace utils

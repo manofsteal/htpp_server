@@ -1,4 +1,4 @@
-#include "Listener.h"
+#include "IOSocketSrv.h"
 
 #include <unistd.h>
 #include <arpa/inet.h>
@@ -8,18 +8,18 @@
 
 
 
-Listener::~Listener() {
+IOSocketSrv::~IOSocketSrv() {
 
 }
 
-Listener::Listener(std::string host, std::uint16_t port) 
+IOSocketSrv::IOSocketSrv(std::string host, std::uint16_t port) 
     : mHost(host), mPort(port)
 {
 
 }
 
 
-Status Listener::setup() {
+Status IOSocketSrv::setup() {
 
   int opt = 1;
   sockaddr_in server_address;
@@ -43,14 +43,14 @@ Status Listener::setup() {
     return Status::N_OK;
   }
 
-  if (::listen(mSockFD, kBacklogSize) < 0) {
+  if (::listen(mSockFD, Const::BacklogSize) < 0) {
     return Status::N_OK;
   }
 
   return Status::OK;
 }
 
-std::optional<os::FileDesc> Listener::listen() {
+std::optional<os::FileDesc> IOSocketSrv::listen() {
 
     sockaddr_in client_address;
     socklen_t client_len = sizeof(client_address);

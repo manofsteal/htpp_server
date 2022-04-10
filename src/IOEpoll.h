@@ -11,10 +11,10 @@
 #include <vector>
 #include <unordered_map>
 #include <memory>
-#include <Linux.h>
-#include <IORWriterIF.h>
-#include <Utils.h>
 #include <functional>
+
+#include "Linux.h"
+#include "Utils.h"
 #include "EpollHandlerIF.h"
 
 
@@ -28,8 +28,12 @@ class IOEpoll {
 
 public:
 
-    IOEpoll(int timeout);
+    enum Const {
+        MAX_EVENTS = 10000,
+        DEFAULT_EVENTS = EPOLLIN | EPOLLET | EPOLLONESHOT,
+    };
 
+    IOEpoll(int timeout);
 
     Status setup();
 
@@ -67,14 +71,10 @@ public:
         size_t MBufLen{0}; // remaining length of data to send
     };
 
-    static constexpr int MAX_EVENTS = 10000;
-
-    static constexpr uint32_t DEFAULT_EVENTS = EPOLLIN | EPOLLET | EPOLLONESHOT;
 
     os::FileDesc mEpollFD;
     std::unordered_map<os::FileDesc, std::shared_ptr<EpollHandlerIF>> mIOHandler;
     std::unordered_map<os::FileDesc, std::shared_ptr<EventData>>      mEventDatas;
-    // std::unordered_map<os::FileDesc, std::shared_ptr<EpollData>> mEventData;
 
     epoll_event mEvents[MAX_EVENTS];
     int mTimeout;

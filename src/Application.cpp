@@ -1,16 +1,21 @@
-#include "Application.h"
-#include "Listener.h"
+
 
 #include <atomic>
 #include <memory>
+
+#include "Utils.h"
+
+#include "Application.h"
+#include "IOSocketSrv.h"
 #include "IOEpoll.h"
 #include "HttpService.h"
 #include "EpollPool.h"
-#include "IOSocket.h"
+#include "IOSocketCli.h"
+
 
 struct Application::Data {
 
-    std::shared_ptr<Listener>    MListener;
+    std::shared_ptr<IOSocketSrv> MIOSocketSrv;
 
     std::shared_ptr<EpollPool>   MEpolls;
     std::shared_ptr<HttpService> MHttpService;
@@ -38,13 +43,13 @@ Status Application::setup() {
         auto service = std::make_shared<HttpService>();
 
     // Register a few endpoints for demo and benchmarking
-        auto say_hello = [](const HttpRequest& request) -> HttpResponse {
+        auto sayHello = [](const HttpRequest& request) -> HttpResponse {
             HttpResponse response(HttpStatusCode::Ok);
-            response.SetHeader("Content-Type", "text/plain");
-            response.SetContent("Hello, world\n");
+            response.setHeader("Content-Type", "text/plain");
+            response.setContent("Hello, world\n");
             return response;
         };
-        auto send_html = [](const HttpRequest& request) -> HttpResponse {
+        auto sendHtml = [](const HttpRequest& request) -> HttpResponse {
             HttpResponse response(HttpStatusCode::Ok);
             std::string content;
             content += "<!doctype html>\n";
@@ -53,30 +58,31 @@ Status Application::setup() {
             content += "<p>A Paragraph</p>\n\n";
             content += "</body>\n</html>\n";
 
-            response.SetHeader("Content-Type", "text/html");
-            response.SetContent(content);
+            response.setHeader("Content-Type", "text/html");
+            response.setContent(content);
             return response;
         };
 
-        service->RegisterHttpRequestHandler("/", HttpMethod::HEAD, say_hello);
-        service->RegisterHttpRequestHandler("/", HttpMethod::GET, say_hello);
-        service->RegisterHttpRequestHandler("/hello.html", HttpMethod::HEAD, send_html);
-        service->RegisterHttpRequestHandler("/hello.html", HttpMethod::GET, send_html);
+        service->registerHandler("/", HttpMethod::HEAD, sayHello);
+        service->registerHandler("/", HttpMethod::GET, sayHello);
+        service->registerHandler("/hello.html", HttpMethod::HEAD, sendHtml);
+        service->registerHandler("/hello.html", HttpMethod::GET, sendHtml);
 
         return service;
 
     };
 
     
-    mData->MListener = std::make_shared<Listener>(host, port);
-    mData->MEpolls   = std::make_shared<EpollPool>(8, (int)EpollConst::TimeoutInfinite);
+    mData->MIOSocketSrv = std::make_shared<IOSocketSrv>(host, port);
+
+    mData->MEpolls   = std::make_shared<EpollPool>(std::thread::hardware_concurrency(), (int)EpollConst::TimeoutInfinite);
     
     mData->MHttpService = htppServiceBuilder();
     
 
-    auto status = mData->MListener->setup();
+    auto status = mData->MIOSocketSrv->setup();
     if (status != Status::OK) {
-        LOG() << "Listener setup failed";
+        LOG() << "IOSocketSrv setup failed" << ENDL;
         return status;
     }
 
@@ -84,13 +90,11 @@ Status Application::setup() {
 
     status = mData->MEpolls->setup();
     if (status != Status::OK) {
-        LOG() << "Epolls setup failed";
+        // LOG() << "Epolls setup failed";
         return status;
     }
 
-
     return Status::OK;
-
 
 }
 Status Application::exec() {
@@ -98,13 +102,13 @@ Status Application::exec() {
 
     while(!mData->MExited) {
         
-        auto clientFD = mData->MListener->listen();
+        auto clientFD = mData->MIOSocketSrv->listen();
 
         if (!clientFD)
             continue;
 
-        auto ioSocket  = std::make_shared<IOSocket>(*clientFD, mData->MHttpService);
-        auto status = mData->MEpolls->add(*clientFD, EPOLLIN, ioSocket);
+        auto ioSockCli  = std::make_shared<IOSocketCli>(*clientFD, mData->MHttpService);
+        auto status = mData->MEpolls->add(*clientFD, EPOLLIN, ioSockCli);
         if (status != Status::OK) {
             LOG() << "Can not handle new socket client: " << *clientFD << ENDL;
         }
