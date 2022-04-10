@@ -7,6 +7,9 @@
 #include <iostream>
 #include <vector>
 #include <sys/epoll.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <unistd.h>
 #include <cstdio>
 
 using namespace std;
@@ -25,12 +28,12 @@ Status IOEpoll::setup() {
 }
 
 
-Status IOEpoll::add(os::FileDesc fd, uint32_t events, Handler handler) {
+Status IOEpoll::add(os::FileDesc fd, uint32_t events, std::shared_ptr<EpollHandlerIF> handler) {
     epoll_event event;
     event.events = (EPOLLIN|EPOLLET);
     event.data.fd = fd;
-    auto epollData = std::make_shared<EventData>(fd, this);
-    event.data.ptr = epollData.get();
+    auto eventData = std::make_shared<EventData>(fd, this);
+    event.data.ptr = eventData.get();
 
     int ret = ::epoll_ctl(mEpollFD, EPOLL_CTL_ADD, fd, &event);
     if (ret < 0) {
@@ -39,17 +42,24 @@ Status IOEpoll::add(os::FileDesc fd, uint32_t events, Handler handler) {
     }
 
     mIOHandler[fd] = handler;
+    mEventDatas[fd] = eventData;
 
     return Status::OK;
 }
 
-Status IOEpoll::mod(os::FileDesc fd, uint32_t events, Handler handler) {
+Status IOEpoll::mod(os::FileDesc fd, uint32_t events, std::shared_ptr<EpollHandlerIF> handler) {
     epoll_event event;
     event.events = events;
     event.data.fd = fd;
 
-    auto epollData = std::make_shared<EventData>(fd, this);
-    event.data.ptr = epollData.get();
+    auto it = mEventDatas.find(fd);
+    if (it == mEventDatas.end()) {
+        auto eventData = std::make_shared<EventData>(fd, this);
+        mEventDatas[fd] = eventData;
+        event.data.ptr = eventData.get();
+    } else {
+        event.data.ptr = it->second.get();
+    }
 
     int ret = ::epoll_ctl(mEpollFD, EPOLL_CTL_MOD, fd, &event);
     if (ret < 0) {
@@ -58,29 +68,80 @@ Status IOEpoll::mod(os::FileDesc fd, uint32_t events, Handler handler) {
     }
 
     mIOHandler[fd] = handler;
+    
+    return Status::OK;
+}
+
+Status IOEpoll::mod(os::FileDesc fd, uint32_t events) {
+    epoll_event event;
+    event.events = events;
+    event.data.fd = fd;
+
+    auto it = mEventDatas.find(fd);
+    if (it == mEventDatas.end()) {
+        auto eventData = std::make_shared<EventData>(fd, this);
+        mEventDatas[fd] = eventData;
+        event.data.ptr = eventData.get();
+    } else {
+        event.data.ptr = it->second.get();
+    }
+
+    int ret = ::epoll_ctl(mEpollFD, EPOLL_CTL_MOD, fd, &event);
+    if (ret < 0) {
+        LOG() << "epoll mod error" << endl;
+        return Status::N_OK;
+    }
 
     return Status::OK;
 }
 
-Status IOEpoll::del(os::FileDesc fd, uint32_t events) {
+Status IOEpoll::del(os::FileDesc fd) {
 
-    epoll_event event;
-    event.events = events;
-    event.data.fd = fd;
-    event.data.ptr = this;
-
-    int ret = epoll_ctl(mEpollFD, EPOLL_CTL_DEL, fd, &event);
+    int ret = epoll_ctl(mEpollFD, EPOLL_CTL_DEL, fd, nullptr);
     if (ret < 0) {
         std::cout << "epoll del error" << endl;
         return Status::N_OK;
     }
+    ::close(fd);
+
     auto it = mIOHandler.find(fd);
     if (it != mIOHandler.end()) {
         mIOHandler.erase(it);
     }
+
+    auto it2 = mEventDatas.find(fd);
+    if (it2 != mEventDatas.end()) {
+        mEventDatas.erase(it2);
+    }
     return Status::OK;
 }
 
+
+Status IOEpoll::write(os::FileDesc fd, const std::vector<uint8_t>& buffer) {
+    
+    auto it = mEventDatas.find(fd);
+    if (it == mEventDatas.end())
+        return Status::N_OK;
+    
+    auto eventData = it->second;
+
+    this->mod(eventData->MFD, EPOLLOUT);
+
+    eventData->MBuffer = buffer;
+    eventData->MBufLen = buffer.size();
+    eventData->MBufIndex = 0;
+
+    LOG() << "epoll::write " << ENDL;
+    ssize_t byteCount = ::write(eventData->MFD, (void*)(&eventData->MBuffer[eventData->MBufIndex]), eventData->MBufLen);
+    if (byteCount >= 0) {
+        LOG() << "epoll::write OK" << ENDL;
+        return Status::OK;
+    }
+
+    LOG() << "epoll::write N_OK" << ENDL;
+    return Status::N_OK;
+
+}
 
 Status IOEpoll::poll() {
 
@@ -97,25 +158,110 @@ Status IOEpoll::poll() {
       const epoll_event& event = mEvents[i];
 
       auto eventData = reinterpret_cast<EventData*>(event.data.ptr);
-      
-      auto fd = eventData->MFD;
 
-      auto& handlers = eventData->MIOEpoll->mIOHandler;
-
+      if (eventData->MIOEpoll == nullptr)
+        continue;
+  
       if ((event.events == EPOLLIN) || (event.events == EPOLLOUT)) {
 
-           LOG() << "event: EPOLLIN || EPOLLOUT" << ENDL;
+    
+        auto it = mIOHandler.find(eventData->MFD);
+        if (it == mIOHandler.end()) {
+            // LOG() << "FD: " << fd << " not found handler" << ENDL;
+            
+        } else {
+            // LOG() << "FD: " << fd << " found" << ENDL;
+            auto handler = it->second;
 
-          auto it = handlers.find(fd);
-          if (it == handlers.end()) {
-            LOG() << "FD: " << fd << " not found handler" << ENDL;
-            continue;
-          }
-          Handler& handler = it->second;
-          handler(event, this);
+            if (event.events == EPOLLIN) {
+
+                // LOG() << "epoll::event: EPOLLIN" << ENDL;
+
+                eventData->MBufDir = EventData::IN;
+    
+                char buffer[(size_t)EpollConst::MaxBufferSize];
+                // auto reponse = std::make_shared<EventData>(fd, this);
+                ssize_t byteCount = recv(eventData->MFD, buffer, (size_t)EpollConst::MaxBufferSize, 0);
+                if (byteCount > 0) {         
+                      // we have fully received the message
+                    // LOG() << "epoll::recv: byteCount: " << byteCount  << ENDL;
+                    std::vector<uint8_t> msgIn(byteCount);
+                    std::copy(buffer, buffer + byteCount, std::back_inserter(msgIn));
+                    
+                    handler->recv(msgIn, eventData->MBuffer);
+                    if (eventData->MBuffer.size() > 0) {
+                        LOG() << "epoll::writeback: byteCount: " << eventData->MBuffer.size()  << ENDL;
+                        eventData->MBufLen = eventData->MBuffer.size();
+                        eventData->MBufIndex = 0;
+                        this->mod(eventData->MFD, EPOLLOUT);
+                    }
+              
+                } else if (byteCount == 0) {   // client has closed connection
+                    
+                    // LOG() << "epoll::recv: byteCount = 0, client has closed connection" << ENDL;
+                    this->del(eventData->MFD);
+                } else {
+                    if (os::SystemError() == EAGAIN || os::SystemError() == EWOULDBLOCK) {  // retry
+                       
+                        // LOG() << "epoll::recv: system error, retry" << ENDL;
+                        this->mod(eventData->MFD, EPOLLIN);
+                    } else {                                        // other error
+                        
+                        // LOG() << "epoll::recv: unknown case, del" << ENDL;
+                        this->del(eventData->MFD);
+                    }
+                }
+            } else {
+         
+                // LOG() << "epoll::event: EPOLLOUT" << ENDL;
+
+                eventData->MBufDir = EventData::OUT;
+
+                if (eventData->MBufLen > 0) {
+                    ssize_t byteCount = send(eventData->MFD, &eventData->MBuffer[eventData->MBufIndex] , eventData->MBufLen, 0);
+                    if (byteCount >= 0) {
+                        if (byteCount < eventData->MBuffer.size()) {  // there are still bytes to write
+                            eventData->MBufIndex += byteCount;
+                            if (eventData->MBufLen < byteCount)
+                                eventData->MBufLen = 0;
+                            else 
+                                eventData->MBufLen   -= byteCount;
+                
+                            LOG() << "epoll::send: byteCount: " << byteCount << ENDL;
+                            this->mod(eventData->MFD, EPOLLOUT);
+
+                        } else {                              // we have written the complete message
+
+                            eventData->MBufDir = EventData::IN;
+                        
+                            LOG() << "epoll::send: completed" << ENDL;
+                            this->mod(eventData->MFD, EPOLLIN);
+
+                        }
+                    } else {
+                        if (os::SystemError() == EAGAIN || os::SystemError() == EWOULDBLOCK) {  // retry
+                        
+                            // LOG() << "epoll::write: system error, retry" << ENDL;
+                            this->mod(eventData->MFD, EPOLLOUT);
+                        } else {                                        // other error
+                        
+                            // LOG() << "epoll::write: unknown case, del" << ENDL;
+                            this->del(eventData->MFD);
+    
+                        }
+                    }
+                } else {
+                    // LOG() << "epoll::write: unknown case, del" << ENDL;
+                    // this->del(eventData->MFD);
+                    this->mod(eventData->MFD, EPOLLIN);
+
+                }
+            }
+        }
       } else {
-          //TODO: remove this fd
-          LOG() << "event: something else" << ENDL;
+
+        // LOG() << "event: something else" << ENDL;
+        this->del(eventData->MFD);
       }
     }
 

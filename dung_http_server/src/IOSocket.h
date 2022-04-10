@@ -1,21 +1,27 @@
-#ifndef IOEPOLL_FD_H_
-#define IOEPOLL_FD_H_
+#ifndef IO_SOCKET_H_
+#define IO_SOCKET_H_
 
 #include <Linux.h>
-#include <IORWriterIF.h>
 #include <memory>
 
-class IOSocket: public IOWriterIF {
+#include "EpollHandlerIF.h"
+
+
+class HttpServiceIF;
+
+class IOSocket: public EpollHandlerIF {
 public:
 
-    IOSocket(os::FileDesc fd);
+    IOSocket(os::FileDesc fd, std::shared_ptr<HttpServiceIF> service = nullptr);
     virtual ~IOSocket();
 
-    std::optional<int> read(std::vector<uint8_t>& buffer) override;  
-    std::optional<int> write(const std::vector<uint8_t>& buffer) override;
+    void handle(const epoll_event&, IOEpoll*) override;
+
+    void recv(const std::vector<uint8_t>& msgIn, std::vector<uint8_t>& msgWriteBack) override;
 
 private:
-    os::FileDesc fd;
+    os::FileDesc mFD;
+    std::shared_ptr<HttpServiceIF> mService;
 };
 
 #endif

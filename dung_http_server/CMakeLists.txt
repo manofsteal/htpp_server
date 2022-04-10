@@ -15,10 +15,12 @@ target_sources(${PROJECT_NAME} PRIVATE
     src/main.cpp
     src/Application.cpp
     src/Listener.cpp
-    src/Poller.cpp
-    src/Service.cpp
     src/IOEpoll.cpp
     src/EpollWorker.cpp
+    src/IOSocket.cpp
+    src/EpollPool.cpp
+    src/HttpService.cpp
+    src/HttpMessage.cpp
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE "-pthread")

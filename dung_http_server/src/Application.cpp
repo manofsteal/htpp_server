@@ -1,20 +1,19 @@
 #include "Application.h"
 #include "Listener.h"
-#include "Poller.h"
-#include "Service.h"
+
 #include <atomic>
 #include <memory>
 #include "IOEpoll.h"
-#include "EpollWorker.h"
+#include "HttpService.h"
+#include "EpollPool.h"
+#include "IOSocket.h"
 
 struct Application::Data {
 
     std::shared_ptr<Listener>    MListener;
-    std::shared_ptr<Poller>      MPoller;
-    std::shared_ptr<Service>     MService;
 
-    std::shared_ptr<EpollWorker> MEpollWorker;
-    std::shared_ptr<IOEpoll>     MIOEpoll;
+    std::shared_ptr<EpollPool>   MEpolls;
+    std::shared_ptr<HttpService> MHttpService;
 
     std::atomic<bool>            MExited;
 
@@ -31,15 +30,49 @@ Application::~Application()
 Status Application::setup() {
     //TODO: add os signal (SIGINT, SIGTERM...) handler here;
 
-    static constexpr int timeout = -1;
     static const std::string host = "0.0.0.0";
     static constexpr  std::uint16_t port = 8080;
 
 
-    mData->MListener = std::make_shared<Listener>(host, port);
-    mData->MIOEpoll   = std::make_shared<IOEpoll>(timeout);
-    mData->MEpollWorker = std::make_shared<EpollWorker>(mData->MIOEpoll);
+    auto htppServiceBuilder = []() {
+        auto service = std::make_shared<HttpService>();
 
+    // Register a few endpoints for demo and benchmarking
+        auto say_hello = [](const HttpRequest& request) -> HttpResponse {
+            HttpResponse response(HttpStatusCode::Ok);
+            response.SetHeader("Content-Type", "text/plain");
+            response.SetContent("Hello, world\n");
+            return response;
+        };
+        auto send_html = [](const HttpRequest& request) -> HttpResponse {
+            HttpResponse response(HttpStatusCode::Ok);
+            std::string content;
+            content += "<!doctype html>\n";
+            content += "<html>\n<body>\n\n";
+            content += "<h1>Hello, world in an Html page</h1>\n";
+            content += "<p>A Paragraph</p>\n\n";
+            content += "</body>\n</html>\n";
+
+            response.SetHeader("Content-Type", "text/html");
+            response.SetContent(content);
+            return response;
+        };
+
+        service->RegisterHttpRequestHandler("/", HttpMethod::HEAD, say_hello);
+        service->RegisterHttpRequestHandler("/", HttpMethod::GET, say_hello);
+        service->RegisterHttpRequestHandler("/hello.html", HttpMethod::HEAD, send_html);
+        service->RegisterHttpRequestHandler("/hello.html", HttpMethod::GET, send_html);
+
+        return service;
+
+    };
+
+    
+    mData->MListener = std::make_shared<Listener>(host, port);
+    mData->MEpolls   = std::make_shared<EpollPool>(8, (int)EpollConst::TimeoutInfinite);
+    
+    mData->MHttpService = htppServiceBuilder();
+    
 
     auto status = mData->MListener->setup();
     if (status != Status::OK) {
@@ -49,28 +82,19 @@ Status Application::setup() {
 
     LOG() << "Server is listening at " << host << ":" << port << std::endl;
 
-    //TODO: error handling
-    status = mData->MIOEpoll->setup();
+    status = mData->MEpolls->setup();
     if (status != Status::OK) {
-        LOG() << "IOEpoll setup failed";
+        LOG() << "Epolls setup failed";
         return status;
     }
 
-     //TODO: error handling
 
     return Status::OK;
+
 
 }
 Status Application::exec() {
 
-    auto status = mData->MEpollWorker->start();
-
-    if (status != Status::OK) {
-        LOG() << "EpollWorker start failed" << std::endl;
-        return status; 
-    }
-
-    //  LOG() << "EpollWorker start successfully" << std::endl;
 
     while(!mData->MExited) {
         
@@ -79,16 +103,13 @@ Status Application::exec() {
         if (!clientFD)
             continue;
 
-        //NOTE: ok
-        // LOG() << "new client: " << *clientFD << ENDL;
+        auto ioSocket  = std::make_shared<IOSocket>(*clientFD, mData->MHttpService);
+        auto status = mData->MEpolls->add(*clientFD, EPOLLIN, ioSocket);
+        if (status != Status::OK) {
+            LOG() << "Can not handle new socket client: " << *clientFD << ENDL;
+        }
 
-        //NOTE: testing
-        status = mData->MIOEpoll->add(*clientFD, EPOLLIN, [&](const epoll_event&, IOEpoll*) {
-            LOG() << "new client" << std::endl;
-        });
-        // auto response = mData->mService.handle(event);
-
-    }
+    };
 
     return Status::OK;
 }
