@@ -15,7 +15,8 @@
 
 #include "Linux.h"
 #include "Utils.h"
-#include "EpollHandlerIF.h"
+#include "IOWriterIF.h"
+#include "ReceiverIF.h"
 
 
 enum class EpollConst {
@@ -24,7 +25,7 @@ enum class EpollConst {
 };
 
 
-class IOEpoll {
+class IOEpoll: public IOWriterIF {
 
 public:
 
@@ -33,18 +34,20 @@ public:
         DEFAULT_EVENTS = EPOLLIN | EPOLLET | EPOLLONESHOT,
     };
 
+    virtual ~IOEpoll();
+
     IOEpoll(int timeout);
 
     Status setup();
 
-    Status add(os::FileDesc fd, uint32_t events, std::shared_ptr<EpollHandlerIF> handler);
+    Status add(os::FileDesc fd, uint32_t events, std::shared_ptr<ReceiverIF> handler);
 
-    Status mod(os::FileDesc fd, uint32_t events, std::shared_ptr<EpollHandlerIF> handler);
+    Status mod(os::FileDesc fd, uint32_t events, std::shared_ptr<ReceiverIF> handler);
     Status mod(os::FileDesc fd, uint32_t events);
 
     Status del(os::FileDesc fd);
 
-    Status write(os::FileDesc fd, const std::vector<uint8_t>& buffer);
+    Status write(os::FileDesc fd, const std::vector<uint8_t>& buffer) override;
 
     Status poll();
 
@@ -73,7 +76,7 @@ public:
 
 
     os::FileDesc mEpollFD;
-    std::unordered_map<os::FileDesc, std::shared_ptr<EpollHandlerIF>> mIOHandler;
+    std::unordered_map<os::FileDesc, std::shared_ptr<ReceiverIF>>     mIOHandler;
     std::unordered_map<os::FileDesc, std::shared_ptr<EventData>>      mEventDatas;
 
     epoll_event mEvents[MAX_EVENTS];

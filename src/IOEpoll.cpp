@@ -28,7 +28,7 @@ Status IOEpoll::setup() {
 }
 
 
-Status IOEpoll::add(os::FileDesc fd, uint32_t events, std::shared_ptr<EpollHandlerIF> handler) {
+Status IOEpoll::add(os::FileDesc fd, uint32_t events, std::shared_ptr<ReceiverIF> handler) {
     epoll_event event;
     event.events = (EPOLLIN|EPOLLET);
     event.data.fd = fd;
@@ -47,7 +47,7 @@ Status IOEpoll::add(os::FileDesc fd, uint32_t events, std::shared_ptr<EpollHandl
     return Status::OK;
 }
 
-Status IOEpoll::mod(os::FileDesc fd, uint32_t events, std::shared_ptr<EpollHandlerIF> handler) {
+Status IOEpoll::mod(os::FileDesc fd, uint32_t events, std::shared_ptr<ReceiverIF> handler) {
     epoll_event event;
     event.events = events;
     event.data.fd = fd;
@@ -188,13 +188,13 @@ Status IOEpoll::poll() {
                     std::vector<uint8_t> msgIn(byteCount);
                     std::copy(buffer, buffer + byteCount, std::back_inserter(msgIn));
                     
-                    handler->recv(msgIn, eventData->MBuffer);
-                    if (eventData->MBuffer.size() > 0) {
-                        LOG() << "epoll::writeback: byteCount: " << eventData->MBuffer.size()  << ENDL;
-                        eventData->MBufLen = eventData->MBuffer.size();
-                        eventData->MBufIndex = 0;
-                        this->mod(eventData->MFD, EPOLLOUT);
-                    }
+                    handler->recv(msgIn);
+                    // if (eventData->MBuffer.size() > 0) {
+                    //     LOG() << "epoll::writeback: byteCount: " << eventData->MBuffer.size()  << ENDL;
+                    //     eventData->MBufLen = eventData->MBuffer.size();
+                    //     eventData->MBufIndex = 0;
+                    //     this->mod(eventData->MFD, EPOLLOUT);
+                    // }
               
                 } else if (byteCount == 0) {   // client has closed connection
                     
@@ -266,5 +266,9 @@ Status IOEpoll::poll() {
     }
 
     return Status::OK;
+    
+}
+
+IOEpoll::~IOEpoll() {
     
 }

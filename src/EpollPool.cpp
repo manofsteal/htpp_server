@@ -32,7 +32,7 @@ Status EpollPool::setup() {
 }
 
 
-Status EpollPool::add(os::FileDesc fd, uint32_t events, std::shared_ptr<EpollHandlerIF> handler) {
+Status EpollPool::add(os::FileDesc fd, uint32_t events, std::shared_ptr<ReceiverIF> handler) {
 
     if (mWorkers.size() == 0) {
         LOG() << "There is no Epoll worker" << ENDL;
@@ -51,5 +51,21 @@ Status EpollPool::add(os::FileDesc fd, uint32_t events, std::shared_ptr<EpollHan
     mCurEpoolWorker = nextEpollWorker();
 
     return status;
+
+}
+
+
+Status EpollPool::write(os::FileDesc fd, const std::vector<uint8_t>& buffer) {
+    for (auto& epoll: mEpolls) {
+        auto status = epoll->write(fd, buffer);
+        if (status == Status::OK) 
+            return status;
+    }
+
+    return Status::N_OK;
+}
+
+
+EpollPool::~EpollPool() {
 
 }

@@ -11,6 +11,7 @@
 #include "HttpService.h"
 #include "EpollPool.h"
 #include "IOSocketCli.h"
+#include "ExecutorPool.h"
 
 
 struct Application::Data {
@@ -18,6 +19,7 @@ struct Application::Data {
     std::shared_ptr<IOSocketSrv> MIOSocketSrv;
 
     std::shared_ptr<EpollPool>   MEpolls;
+    std::shared_ptr<ExecutorPool> MExecutors;
     std::shared_ptr<HttpService> MHttpService;
 
     std::atomic<bool>            MExited;
@@ -75,11 +77,12 @@ Status Application::setup() {
     
     mData->MIOSocketSrv = std::make_shared<IOSocketSrv>(host, port);
 
-    mData->MEpolls   = std::make_shared<EpollPool>(std::thread::hardware_concurrency(), (int)EpollConst::TimeoutInfinite);
+    mData->MEpolls      = std::make_shared<EpollPool>(4, (int)EpollConst::TimeoutInfinite);
+
+    mData->MExecutors   = std::make_shared<ExecutorPool>(std::thread::hardware_concurrency());
     
     mData->MHttpService = htppServiceBuilder();
     
-
     auto status = mData->MIOSocketSrv->setup();
     if (status != Status::OK) {
         LOG() << "IOSocketSrv setup failed" << ENDL;
@@ -90,7 +93,13 @@ Status Application::setup() {
 
     status = mData->MEpolls->setup();
     if (status != Status::OK) {
-        // LOG() << "Epolls setup failed";
+        LOG() << "Epolls setup failed";
+        return status;
+    }
+
+    status = mData->MExecutors->start();
+    if (status != Status::OK) {
+        LOG() << "MExecutors start failed";
         return status;
     }
 
@@ -107,7 +116,7 @@ Status Application::exec() {
         if (!clientFD)
             continue;
 
-        auto ioSockCli  = std::make_shared<IOSocketCli>(*clientFD, mData->MHttpService);
+        auto ioSockCli  = std::make_shared<IOSocketCli>(*clientFD, mData->MHttpService, mData->MEpolls, mData->MExecutors);
         auto status = mData->MEpolls->add(*clientFD, EPOLLIN, ioSockCli);
         if (status != Status::OK) {
             LOG() << "Can not handle new socket client: " << *clientFD << ENDL;

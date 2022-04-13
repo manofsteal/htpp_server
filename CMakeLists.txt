@@ -23,6 +23,8 @@ target_sources(${PROJECT_NAME} PRIVATE
     src/EpollPool.cpp
     src/HttpService.cpp
     src/HttpMessage.cpp
+    src/Executor.cpp
+    src/ExecutorPool.cpp
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE Threads::Threads)
