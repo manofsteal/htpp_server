@@ -2,6 +2,8 @@
 
 #include <atomic>
 #include <memory>
+#include <execinfo.h>
+
 
 #include "Utils.h"
 
@@ -12,6 +14,7 @@
 #include "EpollPool.h"
 #include "IOSocketCli.h"
 #include "ExecutorPool.h"
+#include "Signals.h"
 
 
 struct Application::Data {
@@ -36,6 +39,37 @@ Application::~Application()
 
 Status Application::setup() {
     //TODO: add os signal (SIGINT, SIGTERM...) handler here;
+
+    auto& signal = Signals::singleton();
+    signal.install(SIGSEGV, [](){
+        LOG() << "OS SIGSEGV handling" << ENDL;
+    });
+
+    signal.install(SIGINT, [](){
+        LOG() << "OS SIGINT handling" << ENDL;
+    });
+
+    signal.install(SIGABRT, [](){
+        LOG() << "OS SIGABRT handling" << ENDL;
+
+        void *array[10];
+        size_t size;
+
+        // get void*'s for all entries on the stack
+        size = backtrace(array, 10);
+
+        // print out all the frames to stderr
+        // fprintf(stderr, "Error: signal %d:\n", sig);
+        backtrace_symbols_fd(array, size, STDERR_FILENO);
+        
+    });
+
+    signal.install(SIGTERM, [](){
+        LOG() << "OS SIGTERM handling" << ENDL;
+    });
+
+
+
 
     static const std::string host = "0.0.0.0";
     static constexpr  std::uint16_t port = 8080;

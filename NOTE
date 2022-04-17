@@ -1,0 +1,6 @@
+
+std::terminate() 
+    call std::abort()
+        -> rasise OS::SIGABRT
+            -> catch by signal handler (SIGABRT)
+                -> after handler return -> program crash -> aborted (coredump)
